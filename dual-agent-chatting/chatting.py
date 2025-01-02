@@ -1,15 +1,57 @@
-import openai
 import time
 import json
 import logging
 from datetime import datetime
+import os
+import requests
+from typing import Dict, Any
 
-# Set up logging with timestamp
+# OpenRouter configuration
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
+if not OPENROUTER_API_KEY:
+    raise ValueError("OPENROUTER_API_KEY environment variable is required")
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_HEADERS = {
+    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+    "HTTP-Referer": "https://github.com/chunhualiao",  # Replace with your site URL
+    "Content-Type": "application/json"
+}
+
+# Available models (add/remove as needed)
+AVAILABLE_MODELS = {
+    "gemini": "google/gemini-2.0-flash-thinking-exp:free",
+    "gpt-4o": "openai/gpt-4o-2024-11-20",
+    "gpt-3.5-turbo": "openai/gpt-3.5-turbo",
+    "claude-2": "anthropic/claude-2",
+    "deepseek": "deepseek/deepseek-chat", 
+    "claude-instant": "anthropic/claude-instant-v1",
+    "palm-2": "google/palm-2-chat-bison",
+    "llama-2": "meta-llama/llama-2-70b-chat",
+    "command": "cohere/command-nightly",
+    "mistral": "mistralai/mistral-7b-instruct"
+}
+
+# Generate timestamp for both log and markdown files
+# Create conversations directory if it doesn't exist
+conversations_dir = "conversations"
+os.makedirs(conversations_dir, exist_ok=True)
+
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+log_filename = os.path.join(conversations_dir, f'einstein_musk_conversation_{timestamp}.log')
+md_filename = os.path.join(conversations_dir, f'einstein_musk_conversation_{timestamp}.md')
+
+# Set up logging for debugging
 logging.basicConfig(
-    filename=f'einstein_musk_conversation_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',
+    filename=log_filename,
     level=logging.INFO,
     format='%(asctime)s - %(message)s'
 )
+
+def write_to_markdown(content: str, mode: str = 'a'):
+    """Write content to the markdown file"""
+    with open(md_filename, mode) as f:
+        f.write(content + '\n')
 
 # Einstein's personality and knowledge base
 einstein_system_prompt = """You are Albert Einstein, the renowned theoretical physicist. Respond as Einstein would, with:
@@ -38,32 +80,66 @@ def getResponse(msgs: list, msg: str, selected_model: str, speaker: str) -> str:
     try:
         msgs.append({"role": "user", "content": msg})
         
-        response = openai.ChatCompletion.create(
-            model=selected_model,
-            messages=msgs,
-            temperature=0.9,
-            max_tokens=400
-        )['choices'][0]['message']['content'].strip()
-
-        msgs.append({"role": "assistant", "content": response})
+        # Get full model name from AVAILABLE_MODELS, default to gpt-3.5-turbo if not found
+        model_id = AVAILABLE_MODELS.get(selected_model, AVAILABLE_MODELS['gpt-3.5-turbo'])
+        
+        payload = {
+            "model": model_id,
+            "messages": msgs,
+            "temperature": 0.9,
+            "max_tokens": 400
+        }
+        
+        response = requests.post(
+            f"{OPENROUTER_BASE_URL}/chat/completions",
+            headers=OPENROUTER_HEADERS,
+            json=payload
+        )
+        response.raise_for_status()
+        
+        response_data = response.json()
+        content = response_data['choices'][0]['message']['content'].strip()
+        
+        msgs.append({"role": "assistant", "content": content})
         
         # Memory management: keep last 10 exchanges plus system prompt
         if len(msgs) > 21:  # system prompt + 20 messages (10 exchanges)
-            msgs[1:3] = []  # remove oldest exchange
+            msgs[1:3] = []  # remove oldest exchange (keep system prompt)
             
-        return response
+        return content
         
+    except requests.exceptions.RequestException as e:
+        logging.error(f"API request error in {speaker}'s response: {str(e)}")
+        return f"[Error generating {speaker}'s response: API request failed. Retrying...]"
+    except (KeyError, IndexError) as e:
+        logging.error(f"Response parsing error in {speaker}'s response: {str(e)}")
+        return f"[Error parsing {speaker}'s response. Retrying...]"
     except Exception as e:
-        logging.error(f"Error in {speaker}'s response: {str(e)}")
-        return f"[Error generating {speaker}'s response. Retrying...]"
+        logging.error(f"Unexpected error in {speaker}'s response: {str(e)}")
+        return f"[Error generating {speaker}'s response: {str(e)}]"
 
-def simulate_conversation(initial_topic: str, rounds: int = 10, model: str = 'gpt-4'):
+def simulate_conversation(initial_topic: str, rounds: int = 10, model: str = 'gpt-3.5-turbo') -> None:
     """
     Simulate a conversation between Einstein and Musk on any given topic.
+    
+    Args:
+        initial_topic (str): The topic to discuss
+        rounds (int): Number of conversation rounds (default: 10)
+        model (str): Model to use from AVAILABLE_MODELS (default: 'gpt-3.5-turbo')
     """
     prompt = initial_topic
+    model_id = AVAILABLE_MODELS.get(model, AVAILABLE_MODELS['gpt-3.5-turbo'])
     logging.info(f"Conversation topic: {initial_topic}")
+    logging.info(f"Using model: {model_id}")
     
+    # Initialize markdown file with header
+    write_to_markdown(f"""# Conversation between Einstein and Musk
+## Topic: {initial_topic}
+*Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}*
+*Using model: {model_id}*
+
+""", mode='w')
+
     for round in range(1, rounds + 1):
         try:
             # Einstein's turn
@@ -71,47 +147,68 @@ def simulate_conversation(initial_topic: str, rounds: int = 10, model: str = 'gp
             print(f"\n[Round {round}]")
             print(f"Einstein: {einstein_response}")
             logging.info(f"[Round {round}] Einstein: {einstein_response}")
-            
+            write_to_markdown(f"### Round {round}\n\n**Einstein**: {einstein_response}\n")
+
             # Pause to avoid rate limits
             time.sleep(5)
-            
+
             # Musk's turn
             musk_response = getResponse(msgs_musk, einstein_response, model, "Musk")
             print(f"\nMusk: {musk_response}")
             logging.info(f"Musk: {musk_response}")
-            
+            write_to_markdown(f"**Musk**: {musk_response}\n")
+
             # Next prompt is Musk's response
             prompt = musk_response
-            
+
             # Longer pause between rounds
             time.sleep(10)
-            
-        except openai.error.RateLimitError as e:
-            wait_time = e.retry_after if hasattr(e, 'retry_after') else 60
-            print(f"\nRate limit reached. Waiting for {wait_time} seconds...")
-            time.sleep(wait_time + 1)
-            continue
-        
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:  # Rate limit error
+                wait_time = 60  # Default wait time
+                try:
+                    wait_time = int(e.response.headers.get('Retry-After', 60))
+                except (ValueError, TypeError):
+                    pass
+                print(f"\nRate limit reached. Waiting for {wait_time} seconds...")
+                time.sleep(wait_time + 1)
+                continue
+            raise
+
         except Exception as e:
             logging.error(f"Error in round {round}: {str(e)}")
             print(f"\nError occurred: {str(e)}. Continuing to next round...")
             continue
 
+def list_available_models() -> None:
+    """Print all available models with their IDs"""
+    print("\nAvailable models:")
+    for short_name, full_id in AVAILABLE_MODELS.items():
+        print(f"- {short_name}: {full_id}")
+    print()
+
 if __name__ == "__main__":
     # Example usage
     initial_topic = "singularity with superintelligent AI"
-    What are your thoughts on the relationship between consciousness and quantum mechanics, 
-    and how might this understanding affect the development of artificial intelligence?
-    """
+    selected_model = 'gpt-3.5-turbo'  # Can be changed to any key in AVAILABLE_MODELS
+    
+    print("\n=== Available Models ===")
+    list_available_models()
     
     print("\n=== Starting Einstein-Musk Dialogue ===")
-    print(f"Topic: {initial_topic}\n")
+    print(f"Topic: {initial_topic}")
+    print(f"Using model: {AVAILABLE_MODELS[selected_model]}\n")
     
     simulate_conversation(
         initial_topic=initial_topic,
-        rounds=10,  # Number of exchanges
-        model='gpt-4o'  # Or any other available model
+        rounds=10,
+        model=selected_model
     )
-    
+
     print("\n=== Conversation Complete ===")
-    print("Full conversation log has been saved.")
+    print(f"Conversation saved to: {md_filename}")
+    print(f"Debug log saved to: {log_filename}")
+    
+    # Add footer to markdown file
+    write_to_markdown("\n---\n*Conversation ended*")
