@@ -89,6 +89,6 @@ if __name__ == "__main__":
     topic = input("Enter the topic you want to generate FAQs for: ")
     print(f"Generating markdown article for topic: {topic}...")
     markdown_article = generate_markdown_article(topic)
-    output_filename = f"{topic.replace(' ', '_').lower()}_faq_{model_id}.md"
+    output_filename = f"{topic.replace(' ', '_').lower()}_faq_{model_id}_{timestamp}.md"
     save_markdown_to_file(markdown_article, output_filename)
     print(f"Markdown article saved to {output_filename}")
