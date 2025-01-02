@@ -191,7 +191,7 @@ def list_available_models() -> None:
 if __name__ == "__main__":
     # Example usage
     initial_topic = "singularity with superintelligent AI"
-    selected_model = 'gpt-3.5-turbo'  # Can be changed to any key in AVAILABLE_MODELS
+    selected_model = 'deepseek' # 'gpt-3.5-turbo'  # Can be changed to any key in AVAILABLE_MODELS
     
     print("\n=== Available Models ===")
     list_available_models()
