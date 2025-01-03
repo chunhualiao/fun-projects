@@ -26,10 +26,12 @@ AVAILABLE_MODELS = {
     "claude-2": "anthropic/claude-2",
     "deepseek": "deepseek/deepseek-chat", 
     "claude-instant": "anthropic/claude-instant-v1",
+    "claude-3.5-sonnet":"anthropic/claude-3.5-sonnet",
     "palm-2": "google/palm-2-chat-bison",
     "llama-2": "meta-llama/llama-2-70b-chat",
     "command": "cohere/command-nightly",
-    "mistral": "mistralai/mistral-7b-instruct"
+    "mistral": "mistralai/mistral-7b-instruct",
+    "mythomax": "gryphe/mythomax-l2-13b",
 }
 
 # Generate timestamp for both log and markdown files
@@ -118,32 +120,36 @@ def getResponse(msgs: list, msg: str, selected_model: str, speaker: str) -> str:
         logging.error(f"Unexpected error in {speaker}'s response: {str(e)}")
         return f"[Error generating {speaker}'s response: {str(e)}]"
 
-def simulate_conversation(initial_topic: str, rounds: int = 10, model: str = 'gpt-3.5-turbo') -> None:
+def simulate_conversation(initial_topic: str, rounds: int = 10, einstein_model: str = 'gpt-3.5-turbo', musk_model: str = 'gpt-3.5-turbo') -> None:
     """
     Simulate a conversation between Einstein and Musk on any given topic.
     
     Args:
         initial_topic (str): The topic to discuss
         rounds (int): Number of conversation rounds (default: 10)
-        model (str): Model to use from AVAILABLE_MODELS (default: 'gpt-3.5-turbo')
+        einstein_model (str): Model to use for Einstein from AVAILABLE_MODELS (default: 'gpt-3.5-turbo')
+        musk_model (str): Model to use for Musk from AVAILABLE_MODELS (default: 'gpt-3.5-turbo')
     """
     prompt = initial_topic
-    model_id = AVAILABLE_MODELS.get(model, AVAILABLE_MODELS['gpt-3.5-turbo'])
+    einstein_model_id = AVAILABLE_MODELS.get(einstein_model, AVAILABLE_MODELS['gpt-3.5-turbo'])
+    musk_model_id = AVAILABLE_MODELS.get(musk_model, AVAILABLE_MODELS['gpt-3.5-turbo'])
     logging.info(f"Conversation topic: {initial_topic}")
-    logging.info(f"Using model: {model_id}")
+    logging.info(f"Using models - Einstein: {einstein_model_id}, Musk: {musk_model_id}")
     
     # Initialize markdown file with header
     write_to_markdown(f"""# Conversation between Einstein and Musk
 ## Topic: {initial_topic}
 *Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}*
-*Using model: {model_id}*
+*Using models:*
+- *Einstein: {einstein_model_id}*
+- *Musk: {musk_model_id}*
 
 """, mode='w')
 
     for round in range(1, rounds + 1):
         try:
             # Einstein's turn
-            einstein_response = getResponse(msgs_einstein, prompt, model, "Einstein")
+            einstein_response = getResponse(msgs_einstein, prompt, einstein_model, "Einstein")
             print(f"\n[Round {round}]")
             print(f"Einstein: {einstein_response}")
             logging.info(f"[Round {round}] Einstein: {einstein_response}")
@@ -153,7 +159,7 @@ def simulate_conversation(initial_topic: str, rounds: int = 10, model: str = 'gp
             time.sleep(5)
 
             # Musk's turn
-            musk_response = getResponse(msgs_musk, einstein_response, model, "Musk")
+            musk_response = getResponse(msgs_musk, einstein_response, musk_model, "Musk")
             print(f"\nMusk: {musk_response}")
             logging.info(f"Musk: {musk_response}")
             write_to_markdown(f"**Musk**: {musk_response}\n")
@@ -191,19 +197,23 @@ def list_available_models() -> None:
 if __name__ == "__main__":
     # Example usage
     initial_topic = "singularity with superintelligent AI"
-    selected_model = 'deepseek' # 'gpt-3.5-turbo'  # Can be changed to any key in AVAILABLE_MODELS
+    einstein_model = 'claude-3.5-sonnet'  # More analytical model for Einstein
+    musk_model = 'gpt-4o'      # More dynamic model for Musk
     
     print("\n=== Available Models ===")
     list_available_models()
     
     print("\n=== Starting Einstein-Musk Dialogue ===")
     print(f"Topic: {initial_topic}")
-    print(f"Using model: {AVAILABLE_MODELS[selected_model]}\n")
+    print(f"Using models:")
+    print(f"- Einstein: {AVAILABLE_MODELS[einstein_model]}")
+    print(f"- Musk: {AVAILABLE_MODELS[musk_model]}\n")
     
     simulate_conversation(
         initial_topic=initial_topic,
         rounds=10,
-        model=selected_model
+        einstein_model=einstein_model,
+        musk_model=musk_model
     )
 
     print("\n=== Conversation Complete ===")
